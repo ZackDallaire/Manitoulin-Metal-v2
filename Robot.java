@@ -8,23 +8,20 @@
 
 package frc.robot;
 
-import edu.wpi.first.wpilibj.command.Scheduler;
+import com.ctre.phoenix.motorcontrol.InvertType;
+import com.ctre.phoenix.motorcontrol.can.WPI_TalonSRX;
+
+import edu.wpi.first.wpilibj.CameraServer;
+import edu.wpi.first.wpilibj.Joystick;
 import edu.wpi.first.wpilibj.TimedRobot;
+import edu.wpi.first.wpilibj.Timer;
+import edu.wpi.first.wpilibj.XboxController;
+import edu.wpi.first.wpilibj.command.Scheduler;
+import edu.wpi.first.wpilibj.drive.DifferentialDrive;
+import edu.wpi.first.wpilibj.livewindow.LiveWindow;
 import edu.wpi.first.wpilibj.smartdashboard.SendableChooser;
 import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 
-import edu.wpi.first.wpilibj.Talon;
-import edu.wpi.first.wpilibj.Joystick;
-import edu.wpi.first.wpilibj.MotorSafety;
-import edu.wpi.first.wpilibj.SpeedControllerGroup;
-import edu.wpi.first.wpilibj.CameraServer;
-import edu.wpi.first.wpilibj.Timer;
-import edu.wpi.first.wpilibj.drive.DifferentialDrive;
-import edu.wpi.first.wpilibj.livewindow.LiveWindow;
-import edu.wpi.first.wpilibj.XboxController;
-import edu.wpi.first.wpilibj.command.Scheduler;
-import edu.wpi.first.wpilibj.DriverStation;
-import edu.wpi.first.wpilibj.PWMTalonSRX;
 
 /**
  * The VM is configured to automatically run this class, and to call the
@@ -39,14 +36,16 @@ public class Robot extends TimedRobot {
   private String m_autoSelected;
   private final SendableChooser<String> m_chooser = new SendableChooser<>();
 
-  
+  public Robot() {
+    LiveWindow.disableAllTelemetry();
+  }
 
   // Talon Controls
 
-  private Talon shoot = new Talon(1);
-  private Talon intake = new Talon(3);
+ WPI_TalonSRX shoot = new WPI_TalonSRX(1);
+  WPI_TalonSRX intake = new WPI_TalonSRX(3);
 
-  private Talon Polocord = new Talon(2);
+   WPI_TalonSRX Polocord = new WPI_TalonSRX(2);
   /*
    * private Talon leftMotor = new Talon(7); private Talon rightMotor = new
    * Talon(6);
@@ -63,16 +62,15 @@ public class Robot extends TimedRobot {
   private final double deadZone = 0.05;
 
   // Diffrential Drive
-  Talon m_frontLeft = new Talon(5);
-  Talon m_rearLeft = new Talon(7);
-  SpeedControllerGroup m_left = new SpeedControllerGroup(m_frontLeft, m_rearLeft);
 
-  Talon m_frontRight = new Talon(4);
-  Talon m_rearRight = new Talon(6);
-  SpeedControllerGroup m_right = new SpeedControllerGroup(m_frontRight, m_rearRight);
+  WPI_TalonSRX _rghtFront = new WPI_TalonSRX(4);
+  WPI_TalonSRX _rghtFollower = new WPI_TalonSRX(6);
+  WPI_TalonSRX _leftFront = new WPI_TalonSRX(5);
+  WPI_TalonSRX _leftFollower = new WPI_TalonSRX(7);
 
-  DifferentialDrive m_drive = new DifferentialDrive(m_left, m_right);
+  DifferentialDrive _diffDrive = new DifferentialDrive(_leftFront, _rghtFront);
 
+ 
   // Safety offline
   /**
    * This function is run when the robot is first started up and should be used
@@ -80,9 +78,12 @@ public class Robot extends TimedRobot {
    */
   @Override
   public void robotInit() {
-
+ /*   intake.setSafetyEnabled(true);
+    shoot.setSafetyEnabled(true);
+    Polocord.setSafetyEnabled(true);
+    m_drive.setSafetyEnabled(true);
     // Chooser Code
-
+*/
     m_chooser.setDefaultOption("Default Auto", kDefaultAuto);
 
     m_chooser.addOption("Blue 1", kCustomAuto);
@@ -100,15 +101,50 @@ public class Robot extends TimedRobot {
     SmartDashboard.putData("Auto choices", m_chooser);
 
     // Camera Server
-    CameraServer.getInstance().startAutomaticCapture();
+    CameraServer.getInstance().startAutomaticCapture(0);
+    CameraServer.getInstance().startAutomaticCapture(1);
 
     // Data for motos
 
-    SmartDashboard.putNumber("DrivePower", 0.82);
-    SmartDashboard.putNumber("ShootPower", 0.5);
-    SmartDashboard.putNumber("IntakePower", .5);
+    SmartDashboard.putNumber("DrivePower", 0.6);
+    SmartDashboard.putNumber("ShootPower", -0.5);
+    SmartDashboard.putNumber("IntakePower", .2);
     SmartDashboard.putNumber("PolyCord", 0.6);
+    _rghtFront.configFactoryDefault();
+    _rghtFollower.configFactoryDefault();
+    _leftFront.configFactoryDefault();
+    _leftFollower.configFactoryDefault();
 
+    /* set up followers */
+    _rghtFollower.follow(_rghtFront);
+    _leftFollower.follow(_leftFront);
+
+    /* [3] flip values so robot moves forward when stick-forward/LEDs-green */
+    _rghtFront.setInverted(false); // !< Update this
+    _leftFront.setInverted(true); // !< Update this
+
+    /*
+     * set the invert of the followers to match their respective master controllers
+     */
+    _rghtFollower.setInverted(InvertType.FollowMaster);
+    _leftFollower.setInverted(InvertType.FollowMaster);
+
+    /*
+     * [4] adjust sensor phase so sensor moves positive when Talon LEDs are green
+     */
+    
+
+    /*
+     * WPI drivetrain classes defaultly assume left and right are opposite. call
+     * this so we can apply + to both sides when moving forward. DO NOT CHANGE
+     */
+    _diffDrive.setRightSideInverted(false);
+
+        /*
+         * [4] adjust sensor phase so sensor moves positive when Talon LEDs are green
+         */
+        _rghtFront.setSensorPhase(true);
+        _leftFront.setSensorPhase(true);
   }
 
   /**
@@ -138,16 +174,18 @@ public class Robot extends TimedRobot {
    */
   @Override
   public void autonomousInit() {
-    m_autoSelected = m_chooser.getSelected();
+ /*   m_autoSelected = m_chooser.getSelected();
     // m_autoSelected = SmartDashboard.getString("Auto Selector", kDefaultAuto);
     System.out.println("Auto selected: " + m_autoSelected);
-  }
+  */}
 
   /**
    * This function is called periodically during autonomous.
    */
   @Override
   public void autonomousPeriodic() {
+if(time.get() <= 13) {
+  _diffDrive.arcadeDrive(.33,0);}
 
   }
 
@@ -156,6 +194,10 @@ public class Robot extends TimedRobot {
    * 
    * 
    */
+public void teleopInit() {
+  
+}
+
 
   @Override
   public void teleopPeriodic() {
@@ -165,72 +207,42 @@ public class Robot extends TimedRobot {
     double intakePower = SmartDashboard.getNumber("IntakePower", 0.9);
     double shootPower = SmartDashboard.getNumber("ShootPower", 0.9);
     double polocordPower = SmartDashboard.getNumber("PolocordPower", 0.6);
-    Scheduler.getInstance().run();
+     Scheduler.getInstance().run();
 
     // The Safety Captian should not look at this section
 
-    intake.setSafetyEnabled(true);
-    shoot.setSafetyEnabled(true);
-    Polocord.setSafetyEnabled(true);
-    m_drive.setSafetyEnabled(true);
+   
    
 
-    if (xBox.getAButtonPressed() == true) {
-      Polocord.set(polocordPower);
+    if (xBox.getYButton() == true) {
+      Polocord.set(-.9);
     } else {
       Polocord.set(0);
     }
 
-    if (xBox.getBButton() == true) {
-      shoot.set(shootPower);
+    if (xBox.getBButton() == true ) {
+      shoot.set(.4);
     } else {
       shoot.set(0);
     }
 
-    if (xBox.getRawButton(1) == true) {
-      intake.set(intakePower);
-    } else {
-      intake.set(intakePower);
-    }
-
-    if (Math.abs(bigJ.getY()) > deadZone || Math.abs(bigJ.getX()) > deadZone) {
-      m_drive.arcadeDrive(bigJ.getY()*drivePower,bigJ.getX()*drivePower);
-
-   }else{
-    m_drive.arcadeDrive(0,0);
-   }
-// this is old scripts but are no longer current due to us trying a diffrent method
-    // Polycord Script 
-/*
-    if(xBox.getRawButton(0) == true) {
-      Polocord.set(polocordPower);
-    }else{
-      Polocord.set(0);
-    }
-    
-    // Shooting 
-    
-    if (xBox.getRawButton(5) == true){
-      shoot.set(shootPower);
-    }else{
-      shoot.set(0);
-    }
-    
-    // Intake
-    
-    if (xBox.getRawButton(4) == true || xBox.getRawButton == true){
-      intake.set(intakePower);
-    }else{
+    if (xBox.getAButton() == true) {
+      intake.set(.7);
+    } else if(xBox.getXButton() == true) {
+      intake.set(-.7);
+      shoot.set(-0.4);
+      Polocord.set(0.9);
+    }else {
       intake.set(0);
     }
 
+    if (Math.abs(bigJ.getY()) > deadZone || Math.abs(bigJ.getX()) > deadZone) {
+      _diffDrive.arcadeDrive(bigJ.getY()*.85,bigJ.getX()*-.85);
 
-
-
-    if(Math.abs(bigJ.getY()) > deadZone || Math.abs(bigJ.getX()) > deadZone){
-      move.arcadeDrive(bigJ.getY()*drivePower,bigJ.getX()*drivePower);
-    }
-*/
+   }else{
+    _diffDrive.arcadeDrive(0,0);
+   }
+  
 
 
 
@@ -245,7 +257,5 @@ public class Robot extends TimedRobot {
   public void testPeriodic() {
   }
 
-  public Robot() {
-    LiveWindow.disableAllTelemetry();
-  }
+  
 }
